@@ -37,13 +37,13 @@ jobs:
           python-version: '3.x'
 
       # Step 3: 安装依赖
-      # 运行命令来安装 PyInstaller 和你的脚本所需的 requests 库
+      # 运行命令来安装 PyInstaller 和你的脚本所需的 requests 库及 beautifulsoup4
       - name: Install dependencies
         run: |
           # 升级 pip (可选，但推荐)
           python -m pip install --upgrade pip
-          # 安装 PyInstaller 和 requests
-          pip install pyinstaller requests
+          # 安装 PyInstaller、requests 和 beautifulsoup4
+          pip install pyinstaller requests beautifulsoup4
 
       # Step 4: 使用 PyInstaller 构建 EXE
       # 运行 PyInstaller 命令。
@@ -65,4 +65,3 @@ jobs:
           path: dist/calculate_number.exe
           # 可选: 设置 artifact 的保留天数 (默认为 90 天)
           # retention-days: 7 # 例如，保留 7 天
-
