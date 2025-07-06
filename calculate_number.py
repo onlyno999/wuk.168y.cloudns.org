@@ -13,7 +13,8 @@ LOG_FILE = "calculation_log.txt"
 FETCH_AND_CALC_COUNT = 10 # 获取最新的10条数据
 
 # 配置日志
-logging.basicConfig(level=logging.INFO,
+# !!! 临时将 level=logging.INFO 改为 level=logging.DEBUG 来获取详细日志 !!!
+logging.basicConfig(level=logging.INFO, # <-- 运行调试时请改为 logging.DEBUG
                     format='%(asctime)s - %(levelname)s - %(message)s',
                     handlers=[
                         logging.FileHandler(LOG_FILE, encoding='utf-8'),
@@ -143,20 +144,34 @@ def fetch_data_from_webpage(url, limit=None):
         response = requests.get(url, timeout=15)
         response.raise_for_status() # 检查HTTP错误
 
-        # 获取原始文本内容
-        raw_text = response.text
+        # 显式地使用 utf-8-sig 解码，以处理可能存在的 BOM
+        raw_text = response.content.decode('utf-8-sig')
+        logging.debug(f"获取到的原始文本前500字符: {raw_text[:500]}")
         
         extracted_data = []
         # 按行分割文本，并去除首尾空白行
         lines = raw_text.strip().splitlines()
 
-        for line in lines:
-            if not line.strip(): # 跳过空行
+        for i, line in enumerate(lines):
+            line = line.strip() # 再次去除行首尾空白
+            if not line: # 跳过空行
+                logging.debug(f"跳过空行 (行号: {i+1})")
                 continue
             
+            logging.debug(f"处理行 {i+1}: {repr(line)}") # 打印行的原始表示
+
             parts = line.split('\t') # 按制表符分割
+            logging.debug(f"行 {i+1} 分割为 {len(parts)} 部分: {parts}")
+
             if len(parts) == 3:
                 period_str = parts[0].strip()
+                # 尝试将期号转换为整数，如果失败则认为不是有效数据行
+                try:
+                    period_num = int(period_str)
+                except ValueError:
+                    logging.debug(f"跳过非数字期号行 (行号: {i+1}): {repr(line)}")
+                    continue # 跳过此行，因为它不是一个有效的期号数据行
+
                 # timestamp_str = parts[1].strip() # 时间戳目前不需要，但可以保留
                 numbers_str_comma_separated = parts[2].strip()
 
@@ -170,7 +185,7 @@ def fetch_data_from_webpage(url, limit=None):
                         elif 0 <= val <= 9: # 确保是单个数字 (0-9)
                             processed_digits_list.append(str(val))
                         else:
-                            logging.warning(f"发现非单数字或非10的数字 '{val}'，跳过此数字。原始行: {line}")
+                            logging.warning(f"发现非单数字或非10的数字 '{val}'，跳过此数字。原始行: {repr(line)}")
                             # 如果遇到不符合0-9或10的数字，选择跳过该数字，如果最终长度不足10，则该条记录无效
                             continue
                     
@@ -179,16 +194,16 @@ def fetch_data_from_webpage(url, limit=None):
                         number_string = "".join(processed_digits_list)
                         extracted_data.append({'period': period_str, 'number': number_string})
                     else:
-                        logging.warning(f"处理后的数字列表长度不为10 ({len(processed_digits_list)}), 跳过此行。原始行: {line}")
+                        logging.warning(f"处理后的数字列表长度不为10 ({len(processed_digits_list)}), 跳过此行。原始行: {repr(line)}")
 
                 except ValueError as ve:
-                    logging.warning(f"解析数字时发生错误: {ve}。原始行: {line}")
+                    logging.warning(f"解析数字时发生错误: {ve}。原始行: {repr(line)}")
                     continue
                 except Exception as e:
-                    logging.warning(f"处理数字字符串时发生未知错误: {e}。原始行: {line}")
+                    logging.warning(f"处理数字字符串时发生未知错误: {e}。原始行: {repr(line)}")
                     continue
             else:
-                logging.warning(f"行格式不符合预期 (期望3个制表符分隔的部分)，跳过此行: {line}")
+                logging.warning(f"行格式不符合预期 (期望3个制表符分隔的部分)，跳过此行: {repr(line)}")
             
             if limit and len(extracted_data) >= limit:
                 break # 达到限制数量，停止处理
