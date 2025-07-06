@@ -23,18 +23,34 @@ def fetch_latest_data():
         print("[警告] 网页内容异常，获取失败")
         return []
 
-    data_rows = rows[1:11]  # 跳过第一行“读秒”
+    data_rows = rows[1:]  # 跳过第一行（倒计时行）
 
     results = []
     for row in data_rows:
         tds = row.find_all("td")
         if len(tds) < 2:
             continue
+
         issue = tds[0].text.strip()
-        numbers = tds[1].text.strip().replace("，", ",")
+        numbers_raw = tds[1].text.strip().replace("，", ",")
+        numbers_split = [n.strip() for n in numbers_raw.split(",") if n.strip().isdigit()]
+
+        # 只保留符合要求的期号和 10 个纯数字号码
+        if len(numbers_split) != 10:
+            continue
+
+        # 可选：验证期号格式（纯数字、长度为8）
+        if not (issue.isdigit() and len(issue) == 8):
+            continue
+
+        numbers = ",".join(numbers_split)
         result = {"issue": issue, "numbers": numbers}
         results.append(result)
-    
+
+        # 最多取前 10 个
+        if len(results) >= 10:
+            break
+
     return results
 
 def save_to_log(data):
@@ -42,10 +58,10 @@ def save_to_log(data):
         json.dump(data, f, indent=2, ensure_ascii=False)
 
 def print_results(results):
-    print("="*30)
+    print("=" * 30)
     for item in results:
         print(f"{item['issue']}:{item['numbers']}")
-    print("="*30)
+    print("=" * 30)
 
 def wait_until_next_interval():
     now = datetime.now()
