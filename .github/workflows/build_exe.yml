@@ -1,0 +1,68 @@
+# Workflow 名称，显示在 GitHub Actions 页面上
+name: Build Windows EXE with PyInstaller
+
+# 触发 workflow 的事件
+on:
+  push:
+    branches:
+      - main # 当代码推送到 main 分支时触发此 workflow
+
+  # 也可以添加 workflow_dispatch 允许手动触发
+  # workflow_dispatch:
+
+# 定义一个或多个作业 (jobs)
+jobs:
+  build:
+    # 作业名称
+    name: Build EXE
+
+    # 指定运行此作业的操作系统环境
+    # 我们需要 Windows 环境来构建 Windows EXE
+    runs-on: windows-latest
+
+    # 作业的步骤 (steps)
+    steps:
+      # Step 1: 检出代码
+      # 使用 actions/checkout@v4 action 来获取仓库代码
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # Step 2: 设置 Python 环境
+      # 使用 actions/setup-python@v5 action 来安装指定版本的 Python
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          # 指定 Python 版本，例如 3.x 或 3.10, 3.11, 3.12
+          # windows-latest 通常预装了多个 Python 版本
+          python-version: '3.x'
+
+      # Step 3: 安装依赖
+      # 运行命令来安装 PyInstaller 和你的脚本所需的 requests 库
+      - name: Install dependencies
+        run: |
+          # 升级 pip (可选，但推荐)
+          python -m pip install --upgrade pip
+          # 安装 PyInstaller 和 requests
+          pip install pyinstaller requests
+
+      # Step 4: 使用 PyInstaller 构建 EXE
+      # 运行 PyInstaller 命令。
+      # --onefile 选项将所有内容打包成一个单独的 EXE 文件
+      # calculate_number.py 是你的脚本文件名
+      - name: Build with PyInstaller
+        run: pyinstaller --onefile calculate_number.py
+
+      # Step 5: 上传构建产物 (Artifact)
+      # 将生成的 EXE 文件作为 artifact 上传，方便下载
+      # 使用 actions/upload-artifact@v4 action
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          # artifact 的名称
+          name: calculate-number-exe
+          # 要上传的文件或目录的路径
+          # PyInstaller --onefile 模式下，EXE 文件生成在 dist 目录下
+          path: dist/calculate_number.exe
+          # 可选: 设置 artifact 的保留天数 (默认为 90 天)
+          # retention-days: 7 # 例如，保留 7 天
+
