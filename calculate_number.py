@@ -132,7 +132,7 @@ def calculate_probability(data):
     return result_digit
 
 
-# 修改后的数据获取函数，用于从网页抓取数据
+# 修改后的数据获取函数，用于从网页抓取数据，加入了伪装头
 def fetch_data_from_webpage(url, limit=None):
     """
     从指定的网页地址获取数据，通过解析纯文本内容来提取数字。
@@ -141,7 +141,10 @@ def fetch_data_from_webpage(url, limit=None):
     try:
         logging.info(f"正在从 {url} 获取网页内容...")
 
-        response = requests.get(url, timeout=15)
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36"
+        }
+        response = requests.get(url, headers=headers, timeout=15)
         response.raise_for_status() # 检查HTTP错误
 
         # 显式地使用 utf-8-sig 解码，以处理可能存在的 BOM
@@ -186,7 +189,6 @@ def fetch_data_from_webpage(url, limit=None):
                             processed_digits_list.append(str(val))
                         else:
                             logging.warning(f"发现非单数字或非10的数字 '{val}'，跳过此数字。原始行: {repr(line)}")
-                            # 如果遇到不符合0-9或10的数字，选择跳过该数字，如果最终长度不足10，则该条记录无效
                             continue
                     
                     # 检查处理后的数字列表是否正好有10个数字
@@ -219,129 +221,4 @@ def fetch_data_from_webpage(url, limit=None):
     except requests.exceptions.RequestException as e:
         logging.error(f"获取网页内容失败: {e}")
         return None
-    except Exception as e:
-        logging.error(f"解析网页内容时发生未知错误: {e}")
-        return None
-
-# --- 脚本启动时立即执行一次计算 ---
-logging.info("脚本启动，开始执行首次计算任务。")
-
-try:
-    # 调用 fetch_data_from_webpage
-    data = fetch_data_from_webpage(WEB_PAGE_URL, limit=FETCH_AND_CALC_COUNT)
-
-    if data:
-        # --- 获取并计算下期期号 (首次) ---
-        next_period_number = "未知"
-        # 假设获取到的数据是按时间倒序排列的，最新期号在第一个
-        if data and len(data) > 0 and 'period' in data[0]:
-            try:
-                latest_period = int(data[0]['period'])
-                next_period_number = latest_period + 1
-                logging.info(f"根据最新期号 {latest_period}，下期期号预计为 {next_period_number}")
-            except ValueError:
-                logging.warning(f"无法将最新期号 '{data[0]['period']}' 转换为数字，下期期号将显示为未知。")
-            except Exception as e:
-                logging.warning(f"获取或计算下期期号时发生错误: {e}")
-        else:
-            logging.warning("无法从获取的数据中找到最新期号，下期期号将显示为未知。")
-        # --- 期号获取结束 (首次) ---
-
-        logging.info("计算中...")
-        result = calculate_probability(data)
-        logging.info("计算完成。")
-
-        if result is not None:
-             logging.info(f"下期期号 {next_period_number} 的最有几率的号码是: {result}")
-        else:
-             logging.warning("未能计算出首次最有几率的号码 (可能数据不足或格式问题)。")
-    else:
-        logging.error("未获取到有效数据进行首次计算。")
-
-except Exception as e:
-    logging.exception("首次计算发生未捕获的错误:")
-
-# --- 进入定时循环，实现后续的定时执行 ---
-logging.info("首次计算完成。进入定时循环，目标在每小时的 :00, :05, :10, ... 分执行计算。")
-
-while True:
-    try:
-        # --- 定时逻辑 ---
-        current_ts = time.time()
-        interval_seconds = 300 # 5分钟等于 300 秒
-
-        intervals_since_epoch = current_ts // interval_seconds
-        next_mark_ts = (intervals_since_epoch + 1) * interval_seconds
-
-        sleep_duration = next_mark_ts - current_ts
-
-        if sleep_duration <= 0:
-             current_ts_now = time.time()
-             intervals_since_epoch_now = current_ts_now // interval_seconds
-             next_mark_ts = (intervals_since_epoch_now + 1) * interval_seconds
-             sleep_duration = next_mark_ts - current_ts_now
-             if sleep_duration <= 0:
-                  next_mark_ts += interval_seconds
-                  sleep_duration = next_mark_ts - current_ts_now
-
-        next_run_time_str = datetime.datetime.fromtimestamp(next_mark_ts).strftime('%Y-%m-%d %H:%M:%S')
-
-        # --- 添加倒计时逻辑 ---
-        logging.info(f"等待直到 {next_run_time_str}...")
-
-        countdown_interval = 1
-        remaining_time = sleep_duration
-
-        while remaining_time > countdown_interval:
-            print(f"等待直到 {next_run_time_str}... 剩余 {int(remaining_time)} 秒 ", end='\r', file=sys.stdout, flush=True)
-            time.sleep(countdown_interval)
-            remaining_time = next_mark_ts - time.time()
-
-        print(f"等待直到 {next_run_time_str}... 剩余 {int(max(0, remaining_time))} 秒 ", end='\r', file=sys.stdout, flush=True)
-
-        if remaining_time > 0:
-             time.sleep(remaining_time)
-
-        print("", file=sys.stdout, flush=True)
-
-        logging.info("等待结束，开始执行计算。")
-
-        # --- 执行本期计算任务 (定时) ---
-        logging.info("开始执行本期计算任务。")
-
-        data = fetch_data_from_webpage(WEB_PAGE_URL, limit=FETCH_AND_CALC_COUNT)
-
-        if data:
-            # --- 获取并计算下期期号 (定时) ---
-            next_period_number = "未知"
-            if data and len(data) > 0 and 'period' in data[0]:
-                try:
-                    latest_period = int(data[0]['period'])
-                    next_period_number = latest_period + 1
-                    logging.info(f"根据最新期号 {latest_period}，下期期号预计为 {next_period_number}")
-                except ValueError:
-                    logging.warning(f"无法将最新期号 '{data[0]['period']}' 转换为数字，下期期号将显示为未知。")
-                except Exception as e:
-                    logging.warning(f"获取或计算下期期号时发生错误: {e}")
-            else:
-                logging.warning("无法从获取的数据中找到最新期号，下期期号将显示为未知。")
-            # --- 期号获取结束 (定时) ---
-
-            logging.info("计算中...")
-            result = calculate_probability(data)
-            logging.info("计算完成。")
-
-            if result is not None:
-                 logging.info(f"下期期号 {next_period_number} 的最有几率的号码是: {result}")
-            else:
-                 logging.warning("未能计算出本期最有几率的号码 (可能数据不足或格式问题)。")
-        else:
-            logging.error("未获取到有效数据，跳过本次计算。")
-
-    except KeyboardInterrupt:
-        logging.info("\n用户中断脚本运行。")
-        break
-    except Exception as e:
-        logging.exception("主循环发生未捕获的错误:")
-
-logging.info("脚本结束。")
+    except
