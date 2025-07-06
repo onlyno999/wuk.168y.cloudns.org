@@ -16,47 +16,28 @@ def fetch_latest_data():
         print(f"[错误] 请求网页失败: {e}")
         return []
 
-    # 保存网页源码到文件，方便用浏览器查看
-    with open("debug.html", "w", encoding="utf-8") as f:
-        f.write(response.text)
-    print("[调试] 已保存网页源码到 debug.html")
-
     soup = BeautifulSoup(response.text, "html.parser")
-    rows = soup.select("tr")
+    rows = soup.find_all("tr")
     print(f"[调试] 抓到了 {len(rows)} 个 <tr> 标签")
 
-    if len(rows) < 2:
-        print("[警告] 没抓到表格数据，网页结构可能变了")
-        print("[调试] 网页预览:", response.text[:500])
-        return []
-
-    # 打印前几行内容用于验证结构
-    for i in range(min(3, len(rows))):
-        print(f"[调试] 第{i+1}行内容:", rows[i].get_text(strip=True))
-
-    data_rows = rows[1:]  # 跳过第1行（倒计时）
-
     results = []
-    for row in data_rows:
+    for i, row in enumerate(rows):
         tds = row.find_all("td")
-        if len(tds) < 2:
+        if len(tds) != 2:
             continue
 
         issue = tds[0].text.strip()
-        numbers_raw = tds[1].text.strip().replace("，", ",")
-        numbers_split = [n.strip() for n in numbers_raw.split(",") if n.strip().isdigit()]
+        numbers_raw = tds[1].text.strip()
 
-        # 只保留期号+10个数字的记录
-        if len(numbers_split) != 10:
-            continue
+        # 替换中文逗号为英文逗号
+        numbers_raw = numbers_raw.replace("，", ",")
+        number_list = [n.strip() for n in numbers_raw.split(",") if n.strip().isdigit()]
 
-        if not (issue.isdigit() and len(issue) == 8):
-            continue
+        if len(issue) == 8 and issue.isdigit() and len(number_list) == 10:
+            numbers = ",".join(number_list)
+            results.append({"issue": issue, "numbers": numbers})
 
-        numbers = ",".join(numbers_split)
-        result = {"issue": issue, "numbers": numbers}
-        results.append(result)
-
+        # 只抓取前10条
         if len(results) >= 10:
             break
 
