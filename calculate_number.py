@@ -92,21 +92,26 @@ def calculate_probability(data):
 def fetch_data_from_webpage(url, limit=None):
     try:
         logging.info(f"请求网页数据：{url}")
-        response = requests.get(url, timeout=15)
+        headers = {'User-Agent': 'Mozilla/5.0'}
+        response = requests.get(url, headers=headers, timeout=15)
         response.raise_for_status()
         lines = response.text.strip().splitlines()
+
+        logging.info(f"网页内容前5行样例：{lines[:5]}")
 
         extracted_data = []
         for line in lines:
             if not line.strip():
                 continue
-            parts = line.split('\t')
-            if len(parts) != 3:
+
+            # 用空格拆分，适应格式不确定情况
+            parts = line.split()
+            if len(parts) < 3:
                 logging.warning(f"行格式错误，跳过：{line}")
                 continue
 
             period = parts[0].strip()
-            numbers_str = parts[2].strip()
+            numbers_str = parts[-1].strip()  # 取最后一列作为数字列
             digits = []
 
             for num in numbers_str.split(','):
@@ -116,7 +121,9 @@ def fetch_data_from_webpage(url, limit=None):
                         digits.append('0')
                     elif 0 <= val <= 9:
                         digits.append(str(val))
-                except:
+                    else:
+                        logging.warning(f"数字超出范围，跳过：{num} in line: {line}")
+                except ValueError:
                     logging.warning(f"数字异常跳过：{num} in line: {line}")
                     continue
 
@@ -179,7 +186,7 @@ def start_loop():
         except KeyboardInterrupt:
             logging.info("用户中断，脚本退出。")
             break
-        except Exception as e:
+        except Exception:
             logging.exception("循环中出现异常：")
 
 # ------------------- 入口 -------------------
