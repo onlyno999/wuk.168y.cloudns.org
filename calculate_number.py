@@ -1,43 +1,61 @@
 import requests
 from bs4 import BeautifulSoup
+import json
+import time
+from datetime import datetime, timedelta
 
 url = "https://wuk.168y.cloudns.org/"
+output_file = "nibaba.json"
 
-try:
-    response = requests.get(url, timeout=10)
-    response.raise_for_status()
-except requests.RequestException as e:
-    print(f"请求网页失败: {e}")
-    exit()
+def fetch_and_save():
+    try:
+        response = requests.get(url, timeout=10)
+        response.raise_for_status()
+    except requests.RequestException as e:
+        print(f"[错误] 请求失败: {e}")
+        return
 
-soup = BeautifulSoup(response.text, "html.parser")
+    soup = BeautifulSoup(response.text, "html.parser")
+    all_rows = soup.select("tr")
+    data_rows = all_rows[1:11]  # 跳过第1行，取接下来的10行数据
 
-# 选取表格的前10行
-data_rows = soup.select("tr")[:10]
+    results = []
 
-results = []
+    for row in data_rows:
+        tds = row.find_all("td")
+        if len(tds) >= 3:
+            issue = tds[0].text.strip()
+            time_str = tds[1].text.strip()
+            numbers = [td.text.strip() for td in tds[2:]]
+            result = {
+                "issue": issue,
+                "time": time_str,
+                "numbers": numbers
+            }
+            results.append(result)
 
-# 调试打印前几行结构，方便确认网页结构（可以注释掉）
-for i, row in enumerate(data_rows):
-    print(f"第{i+1}行内容:\n{row.prettify()}\n{'-'*40}")
-
-for row in data_rows:
-    tds = row.find_all("td")
-    if len(tds) >= 3:
-        issue = tds[0].text.strip()        # 第1个td，期号
-        date = tds[1].text.strip()         # 第2个td，时间
-        numbers = ",".join(td.text.strip() for td in tds[2:])  # 第3个td开始，所有号码合并
+    if results:
+        with open(output_file, "w", encoding="utf-8") as f:
+            json.dump(results, f, ensure_ascii=False, indent=2)
+        print(f"[成功] 已保存最新 {len(results)} 条数据至 {output_file}\n")
     else:
-        issue = "未知期号"
-        date = ""
-        numbers = "未知号码"
+        print("[提示] 没有提取到有效数据。\n")
 
-    result = f"{issue} {date} {numbers}"
-    results.append(result)
+def wait_until_next_5_min():
+    now = datetime.now()
+    minute = (now.minute // 5 + 1) * 5
+    if minute >= 60:
+        next_time = now.replace(minute=0, second=0, microsecond=0) + timedelta(hours=1)
+    else:
+        next_time = now.replace(minute=minute, second=0, microsecond=0)
+    wait_seconds = (next_time - now).total_seconds()
+    print(f"[等待] 距离下一次抓取还有 {int(wait_seconds)} 秒，将在 {next_time.strftime('%H:%M:%S')} 执行。")
+    time.sleep(wait_seconds)
 
-for res in results:
-    print(res)
+# 第一次立即执行
+fetch_and_save()
 
-with open("lottery_data.txt", "w", encoding="utf-8") as f:
-    for res in results:
-        f.write(res + "\n")
+# 后续每整5分钟执行一次
+while True:
+    wait_until_next_5_min()
+    fetch_and_save()
