@@ -1,51 +1,83 @@
-def fetch_latest_data(retries=3, delay=2):
-    for attempt in range(retries):
-        try:
-            response = requests.get(URL, timeout=10)
-            response.raise_for_status()
-        except requests.RequestException as e:
-            print(f"[错误] 请求失败: {e}")
-            return []
+import requests
+from bs4 import BeautifulSoup
+import time
+import json
+from datetime import datetime
 
-        soup = BeautifulSoup(response.text, "html.parser")
-        rows = soup.select("tr")
-        
-        # 确保至少有两行（跳过第一行后还有内容）
-        if len(rows) < 2:
-            print(f"[警告] 没有抓取到有效行数，第 {attempt + 1} 次尝试...")
-            time.sleep(delay)
+URL = "https://wuk.168y.cloudns.org/"
+LOG_FILE = "nibaba.json"
+FETCH_INTERVAL = 300  # 5 分钟 = 300 秒
+
+def fetch_latest_data():
+    try:
+        response = requests.get(URL, timeout=10)
+        response.raise_for_status()
+    except requests.RequestException as e:
+        print(f"[错误] 请求网页失败: {e}")
+        return []
+
+    soup = BeautifulSoup(response.text, "html.parser")
+    rows = soup.select("tr")
+
+    if len(rows) < 2:
+        print("[警告] 网页内容异常，获取失败")
+        return []
+
+    data_rows = rows[1:11]  # 跳过第一行“读秒”
+
+    results = []
+    for row in data_rows:
+        tds = row.find_all("td")
+        if len(tds) < 2:
             continue
+        issue = tds[0].text.strip()
+        numbers = tds[1].text.strip().replace("，", ",")
+        result = {"issue": issue, "numbers": numbers}
+        results.append(result)
+    
+    return results
 
-        data_rows = rows[1:11]  # 跳过第1行
+def save_to_log(data):
+    with open(LOG_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2, ensure_ascii=False)
 
-        results = []
-        for row in data_rows:
-            issue_tag = row.select_one(".issue")
-            numbers_tag = row.select_one(".numbers")
+def print_results(results):
+    print("="*30)
+    for item in results:
+        print(f"{item['issue']}:{item['numbers']}")
+    print("="*30)
 
-            # 如果网页 class 没有这些名称，可使用 fallback 或打印 row 来调试
-            if not issue_tag or not numbers_tag:
-                continue
+def wait_until_next_interval():
+    now = datetime.now()
+    seconds_to_next = 300 - ((now.minute % 5) * 60 + now.second)
+    while seconds_to_next > 0:
+        mins, secs = divmod(seconds_to_next, 60)
+        print(f"\r等待下次抓取：{mins:02d}:{secs:02d}", end="", flush=True)
+        time.sleep(1)
+        seconds_to_next -= 1
+    print()
 
-            issue = issue_tag.text.strip()
-            numbers_raw = numbers_tag.text.strip()
+def main():
+    print("[初始化] 开始首次抓取")
+    results = fetch_latest_data()
+    if not results:
+        print("[失败] 首次抓取未成功")
+    else:
+        save_to_log(results)
+        print_results(results)
 
-            numbers = ",".join([
-                "0" if n == "10" else n
-                for n in numbers_raw.replace("，", ",").replace(" ", "").split(",")
-                if n.strip()
-            ])
-
-            results.append({
-                "issue": issue,
-                "numbers": numbers
-            })
-
-        if results:
-            return results
+    while True:
+        wait_until_next_interval()
+        print(f"\n[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] 开始抓取...")
+        latest = fetch_latest_data()
+        if latest:
+            save_to_log(latest)
+            print_results(latest)
         else:
-            print(f"[警告] 没有提取到期号和号码，第 {attempt + 1} 次尝试...")
-            time.sleep(delay)
+            print("[警告] 本次抓取失败，保留上次记录")
 
-    print("[失败] 多次尝试后仍未抓取到数据。")
-    return []
+try:
+    main()
+except Exception as e:
+    print(f"[致命错误] 程序异常终止: {e}")
+    input("按任意键退出...")
