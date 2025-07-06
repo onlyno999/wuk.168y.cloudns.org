@@ -16,14 +16,25 @@ def fetch_latest_data():
         print(f"[错误] 请求网页失败: {e}")
         return []
 
+    # 保存网页源码到文件，方便用浏览器查看
+    with open("debug.html", "w", encoding="utf-8") as f:
+        f.write(response.text)
+    print("[调试] 已保存网页源码到 debug.html")
+
     soup = BeautifulSoup(response.text, "html.parser")
     rows = soup.select("tr")
+    print(f"[调试] 抓到了 {len(rows)} 个 <tr> 标签")
 
     if len(rows) < 2:
-        print("[警告] 网页内容异常，获取失败")
+        print("[警告] 没抓到表格数据，网页结构可能变了")
+        print("[调试] 网页预览:", response.text[:500])
         return []
 
-    data_rows = rows[1:]  # 跳过第一行（倒计时行）
+    # 打印前几行内容用于验证结构
+    for i in range(min(3, len(rows))):
+        print(f"[调试] 第{i+1}行内容:", rows[i].get_text(strip=True))
+
+    data_rows = rows[1:]  # 跳过第1行（倒计时）
 
     results = []
     for row in data_rows:
@@ -35,11 +46,10 @@ def fetch_latest_data():
         numbers_raw = tds[1].text.strip().replace("，", ",")
         numbers_split = [n.strip() for n in numbers_raw.split(",") if n.strip().isdigit()]
 
-        # 只保留符合要求的期号和 10 个纯数字号码
+        # 只保留期号+10个数字的记录
         if len(numbers_split) != 10:
             continue
 
-        # 可选：验证期号格式（纯数字、长度为8）
         if not (issue.isdigit() and len(issue) == 8):
             continue
 
@@ -47,7 +57,6 @@ def fetch_latest_data():
         result = {"issue": issue, "numbers": numbers}
         results.append(result)
 
-        # 最多取前 10 个
         if len(results) >= 10:
             break
 
